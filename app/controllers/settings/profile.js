@@ -8,6 +8,8 @@ import { task } from 'ember-concurrency';
 export default class extends Controller {
   @service notifications;
 
+  @tracked isAddingEmail = false;
+
   @tracked publishNotifications;
 
   @action handleNotificationsChange(event) {
