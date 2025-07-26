@@ -1,5 +1,7 @@
 use bon::Builder;
+use chrono::{DateTime, Utc};
 use diesel::prelude::*;
+use diesel::upsert::on_constraint;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use secrecy::SecretString;
 
@@ -16,6 +18,17 @@ pub struct Email {
     pub primary: bool,
     #[diesel(deserialize_as = String, serialize_as = String)]
     pub token: SecretString,
+    pub token_generated_at: Option<DateTime<Utc>>,
+}
+
+impl Email {
+    pub async fn find(conn: &mut AsyncPgConnection, id: i32) -> QueryResult<Self> {
+        emails::table
+            .find(id)
+            .select(Email::as_select())
+            .first(conn)
+            .await
+    }
 }
 
 #[derive(Debug, Insertable, AsChangeset, Builder)]
@@ -38,52 +51,19 @@ impl NewEmail<'_> {
             .await
     }
 
-    /// Inserts the email into the database and returns it, unless the user already has a
-    /// primary email, in which case it will do nothing and return `None`.
-    pub async fn insert_primary_if_missing(
+    /// Inserts the email into the database and returns the email record,
+    /// or does nothing if it already exists and returns `None`.
+    pub async fn insert_if_missing(
         &self,
         conn: &mut AsyncPgConnection,
     ) -> QueryResult<Option<Email>> {
-        // Check if the user already has a primary email
-        let primary_count = emails::table
-            .filter(emails::user_id.eq(self.user_id))
-            .filter(emails::primary.eq(true))
-            .count()
-            .get_result::<i64>(conn)
-            .await?;
-
-        if primary_count > 0 {
-            return Ok(None); // User already has a primary email
-        }
-
-        self.insert(conn).await.map(Some)
-    }
-
-    // Inserts an email for the user, replacing the primary email if it exists.
-    pub async fn insert_or_update_primary(
-        &self,
-        conn: &mut AsyncPgConnection,
-    ) -> QueryResult<Email> {
-        // Attempt to update an existing primary email
-        let updated_email = diesel::update(
-            emails::table
-                .filter(emails::user_id.eq(self.user_id))
-                .filter(emails::primary.eq(true)),
-        )
-        .set((
-            emails::email.eq(self.email),
-            emails::verified.eq(self.verified),
-        ))
-        .returning(Email::as_returning())
-        .get_result(conn)
-        .await
-        .optional()?;
-
-        if let Some(email) = updated_email {
-            Ok(email)
-        } else {
-            // Otherwise, insert a new email
-            self.insert(conn).await
-        }
+        diesel::insert_into(emails::table)
+            .values(self)
+            .on_conflict(on_constraint("unique_user_email"))
+            .do_nothing()
+            .returning(Email::as_returning())
+            .get_result(conn)
+            .await
+            .optional()
     }
 }

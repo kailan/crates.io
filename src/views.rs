@@ -1,7 +1,8 @@
 use crate::external_urls::remove_blocked_urls;
 use crate::models::{
-    ApiToken, Category, Crate, Dependency, DependencyKind, Keyword, Owner, ReverseDependency, Team,
-    TopVersions, TrustpubData, User, Version, VersionDownload, VersionOwnerAction,
+    ApiToken, Category, Crate, Dependency, DependencyKind, Email, Keyword, Owner,
+    ReverseDependency, Team, TopVersions, TrustpubData, User, Version, VersionDownload,
+    VersionOwnerAction,
 };
 use chrono::{DateTime, Utc};
 use crates_io_github as github;
@@ -676,6 +677,17 @@ pub struct EncodablePrivateUser {
     #[schema(example = "ghost")]
     pub login: String,
 
+    /// The user's email addresses.
+    #[schema(example = json!([
+        {
+            "id": 42,
+            "email": "user@example.com",
+            "verified": true,
+            "primary": true,
+            "verification_email_sent": true
+        }]))]
+    pub emails: Vec<EncodableEmail>,
+
     /// The user's display name, if set.
     #[schema(example = "Kate Morgan")]
     pub name: Option<String>,
@@ -683,16 +695,23 @@ pub struct EncodablePrivateUser {
     /// Whether the user's primary email address, if set, has been verified.
     #[schema(example = true)]
     #[serde(rename = "email_verified")]
+    #[deprecated(note = "Use `emails` array instead, check that `verified` property is true.")]
     pub primary_email_verified: bool,
 
     /// Whether the user's has been sent a verification email to their primary email address, if set.
     #[schema(example = true)]
     #[serde(rename = "email_verification_sent")]
+    #[deprecated(
+        note = "Use `emails` array instead, check that `token_generated_at` property is not null."
+    )]
     pub primary_email_verification_sent: bool,
 
     /// The user's primary email address, if set.
     #[schema(example = "kate@morgan.dev")]
     #[serde(rename = "email")]
+    #[deprecated(
+        note = "Use `emails` array instead, maximum of one entry will have `primary` property set to true."
+    )]
     pub primary_email: Option<String>,
 
     /// The user's avatar URL, if set.
@@ -714,12 +733,7 @@ pub struct EncodablePrivateUser {
 
 impl EncodablePrivateUser {
     /// Converts this `User` model into an `EncodablePrivateUser` for JSON serialization.
-    pub fn from(
-        user: User,
-        primary_email: Option<String>,
-        primary_email_verified: bool,
-        primary_email_verification_sent: bool,
-    ) -> Self {
+    pub fn from(user: User, emails: Vec<Email>) -> Self {
         let User {
             id,
             name,
@@ -731,17 +745,61 @@ impl EncodablePrivateUser {
         } = user;
         let url = format!("https://github.com/{gh_login}");
 
+        let primary_email = emails.iter().find(|e| e.primary);
+        let primary_email_verified = primary_email.map(|e| e.verified).unwrap_or(false);
+        let primary_email_verification_sent =
+            primary_email.and_then(|e| e.token_generated_at).is_some();
+        let primary_email = primary_email.map(|e| e.email.clone());
+
+        #[allow(deprecated)]
         EncodablePrivateUser {
             id,
-            primary_email,
+            emails: emails.into_iter().map(EncodableEmail::from).collect(),
             primary_email_verified,
             primary_email_verification_sent,
+            primary_email,
             avatar: gh_avatar,
             login: gh_login,
             name,
             url: Some(url),
             is_admin,
             publish_notifications,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, utoipa::ToSchema)]
+#[schema(as = Email)]
+pub struct EncodableEmail {
+    /// An opaque identifier for the email.
+    #[schema(example = 42)]
+    pub id: i32,
+
+    /// The email address.
+    #[schema(example = "user@example.com")]
+    pub email: String,
+
+    /// Whether the email address has been verified.
+    #[schema(example = true)]
+    pub verified: bool,
+
+    /// Whether the verification email has been sent.
+    #[schema(example = true)]
+    pub verification_email_sent: bool,
+
+    /// Whether this is the user's primary email address, meaning notifications will be sent here.
+    #[schema(example = true)]
+    pub primary: bool,
+}
+
+impl From<Email> for EncodableEmail {
+    fn from(email: Email) -> Self {
+        Self {
+            id: email.id,
+            email: email.email,
+            verified: email.verified,
+            verification_email_sent: email.token_generated_at.is_some(),
+            primary: email.primary,
         }
     }
 }
