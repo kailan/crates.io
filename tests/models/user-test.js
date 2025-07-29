@@ -86,7 +86,7 @@ module('Model | User', function (hooks) {
     });
   });
 
-  module('updatePrimaryEmail()', function () {
+  module('updateEmail()', function () {
     test('happy path', async function (assert) {
       let email = this.db.email.create({ email: 'old@email.com' });
       let user = this.db.user.create({ emails: [email] });

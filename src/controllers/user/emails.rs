@@ -22,6 +22,13 @@ pub struct EmailCreate {
     email: String,
 }
 
+#[derive(Deserialize, utoipa::ToSchema)]
+pub struct EmailUpdate {
+    /// Whether this email is the primary email for the user.
+    /// Setting this to `true` will un-mark any other primary email.
+    primary: bool,
+}
+
 /// Add a new email address to a user profile.
 #[utoipa::path(
     post,
@@ -149,26 +156,28 @@ pub async fn delete_email(
     Ok(OkResponse::new())
 }
 
-/// Mark a specific email address as the primary email. This will cause notifications to be sent to this email address.
+/// Update the given email address. Currently, this only allows setting the email as primary.
 #[utoipa::path(
-    put,
-    path = "/api/v1/users/{id}/emails/{email_id}/set_primary",
+    patch,
+    path = "/api/v1/users/{id}/emails/{email_id}",
+    request_body = inline(EmailUpdate),
     params(
         ("id" = i32, Path, description = "ID of the user"),
-        ("email_id" = i32, Path, description = "ID of the email to set as primary"),
+        ("email_id" = i32, Path, description = "ID of the email to update"),
     ),
     security(
         ("api_token" = []),
         ("cookie" = []),
     ),
     tag = "users",
-    responses((status = 200, description = "Successful Response", body = inline(OkResponse))),
+    responses((status = 200, description = "Successful Response", body = EncodableEmail)),
 )]
-pub async fn set_primary_email(
+pub async fn update_email(
     state: AppState,
     Path((param_user_id, email_id)): Path<(i32, i32)>,
     req: Parts,
-) -> AppResult<OkResponse> {
+    Json(email_update): Json<EmailUpdate>,
+) -> AppResult<Json<EncodableEmail>> {
     let mut conn = state.db_write().await?;
     let auth = AuthCheck::default().check(&req, &mut conn).await?;
 
@@ -184,8 +193,12 @@ pub async fn set_primary_email(
         .await
         .map_err(|_| not_found())?;
 
-    if email.primary {
+    if email_update.primary && email.primary {
         return Err(bad_request("email is already primary"));
+    } else if email_update.primary {
+        return Err(bad_request(
+            "cannot set `primary` to false, please set another email as primary",
+        ));
     }
 
     diesel::sql_query("SELECT promote_email_to_primary($1)")
@@ -194,5 +207,8 @@ pub async fn set_primary_email(
         .await
         .map_err(|_| server_error("Error in marking email as primary"))?;
 
-    Ok(OkResponse::new())
+    Ok(Json(EncodableEmail::from(Email {
+        primary: email_update.primary,
+        ..email
+    })))
 }

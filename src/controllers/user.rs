@@ -7,5 +7,5 @@ pub mod update;
 
 #[allow(deprecated)]
 pub use email_verification::{resend_email_verification, resend_email_verification_all};
-pub use emails::{create_email, delete_email};
+pub use emails::{create_email, delete_email, update_email};
 pub use update::update_user;

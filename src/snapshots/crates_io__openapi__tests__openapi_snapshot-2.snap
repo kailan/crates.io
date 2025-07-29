@@ -4578,11 +4578,9 @@ expression: response.json()
         "tags": [
           "users"
         ]
-      }
-    },
-    "/api/v1/users/{id}/emails/{email_id}/set_primary": {
-      "put": {
-        "operationId": "set_primary_email",
+      },
+      "patch": {
+        "operationId": "update_email",
         "parameters": [
           {
             "description": "ID of the user",
@@ -4595,7 +4593,7 @@ expression: response.json()
             }
           },
           {
-            "description": "ID of the email to set as primary",
+            "description": "ID of the email to update",
             "in": "path",
             "name": "email_id",
             "required": true,
@@ -4605,21 +4603,31 @@ expression: response.json()
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "primary": {
+                    "description": "Whether this email is the primary email for the user.\nSetting this to `true` will un-mark any other primary email.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "primary"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "ok": {
-                      "example": true,
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/Email"
                 }
               }
             },
@@ -4634,7 +4642,7 @@ expression: response.json()
             "cookie": []
           }
         ],
-        "summary": "Mark a specific email address as the primary email. This will cause notifications to be sent to this email address.",
+        "summary": "Update the given email address. Currently, this only allows setting the email as primary.",
         "tags": [
           "users"
         ]

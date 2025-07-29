@@ -15,8 +15,9 @@ pub trait MockEmailHelper: RequestHelper {
     }
 
     async fn update_primary_email(&self, user_id: i32, email_id: i32) -> Response<()> {
-        let url = format!("/api/v1/users/{user_id}/emails/{email_id}/set_primary");
-        self.put(&url, "").await
+        let url = format!("/api/v1/users/{user_id}/emails/{email_id}");
+        let body = json!({"primary": true});
+        self.patch(&url, body.to_string()).await
     }
 }
 

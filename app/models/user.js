@@ -53,7 +53,7 @@ export default class User extends Model {
   }
 
   async updatePrimaryEmail(emailId) {
-    await waitForPromise(apiAction(this, { method: 'PUT', path: `emails/${emailId}/set_primary` }));
+    await waitForPromise(apiAction(this, { method: 'PATCH', path: `emails/${emailId}`, data: { primary: true } }));
 
     this.store.pushPayload({
       user: {
